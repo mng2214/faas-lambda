@@ -1,2 +1,4 @@
-package com.faas;public class FunctionHandler {
+package com.faas;
+
+public class FunctionHandler {
 }

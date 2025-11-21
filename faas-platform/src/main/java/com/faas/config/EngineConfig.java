@@ -1,2 +1,4 @@
-package com.faas.config;public class EngineConfig {
+package com.faas.config;
+
+public class EngineConfig {
 }

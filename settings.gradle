@@ -1,7 +1,7 @@
-rootProject.name = 'faas-lambda-function'
+rootProject.name = 'faas-lambda'
 
-include 'faas-common',
-        'faas-functions',
-        'faas-engine',
-        'faas-platform',
-        'faas-lambda-service'
+include 'faas-common'
+include 'faas-engine'
+include 'faas-functions'
+include 'faas-platform'
+include 'faas-lambda-service'

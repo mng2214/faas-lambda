@@ -1,2 +1,4 @@
-package com.faas.config;public class RedisConfig {
+package com.faas.config;
+
+public class RedisConfig {
 }

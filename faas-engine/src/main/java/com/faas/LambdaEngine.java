@@ -1,2 +1,4 @@
-package com.faas;public class LambdaEngine {
+package com.faas;
+
+public class LambdaEngine {
 }

@@ -1,2 +1,4 @@
-package com.faas.service;public interface EnvenService {
+package com.faas.service;
+
+public interface EventService {
 }

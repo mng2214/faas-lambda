@@ -1,2 +1,4 @@
-package com.faas;public class FunctionRegistry {
+package com.faas;
+
+public class FunctionRegistry {
 }

@@ -1,2 +1,4 @@
-package com.faas;public class FunctionEvent {
+package com.faas;
+
+public class FunctionEvent {
 }

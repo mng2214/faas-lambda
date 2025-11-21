@@ -1,2 +1,4 @@
-package com.faas.api;public class EventController {
+package com.faas.api;
+
+public class EventController {
 }
