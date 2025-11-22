@@ -1,7 +1,6 @@
 package com.faas.api;
 
-import com.faas.LocalLambdaPlatform;
-import com.faas.RedisWorkerStorage;
+import com.faas.core.LocalLambdaPlatform;
 import com.faas.dto.FunctionInfo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

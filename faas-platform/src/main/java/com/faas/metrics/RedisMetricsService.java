@@ -1,10 +1,9 @@
-package com.faas;
+package com.faas.metrics;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import static com.faas.constants.RedisKeys.*;
-
 
 @Service
 public class RedisMetricsService {
@@ -16,22 +15,24 @@ public class RedisMetricsService {
     }
 
     public long getActiveInvocations() {
-        String v = redis.opsForValue().get(ACTIVE_INVOCATIONS);
-        return v != null ? Long.parseLong(v) : 0L;
+        return getLongValue(ACTIVE_INVOCATIONS);
     }
 
     public long getProcessedCount() {
-        String v = redis.opsForValue().get(PROCESSED_COUNT);
-        return v != null ? Long.parseLong(v) : 0L;
+        return getLongValue(PROCESSED_COUNT);
     }
 
     public long getErrorCount() {
-        String v = redis.opsForValue().get(ERROR_COUNT);
-        return v != null ? Long.parseLong(v) : 0L;
+        return getLongValue(ERROR_COUNT);
     }
 
     public long getQueueLength() {
         Long size = redis.opsForList().size(EVENTS_QUEUE);
         return size != null ? size : 0L;
+    }
+
+    private long getLongValue(String key) {
+        String v = redis.opsForValue().get(key);
+        return v != null ? Long.parseLong(v) : 0L;
     }
 }

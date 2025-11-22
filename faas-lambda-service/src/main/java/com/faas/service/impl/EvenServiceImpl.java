@@ -1,6 +1,6 @@
 package com.faas.service.impl;
 
-import com.faas.LocalLambdaPlatform;
+import com.faas.core.LocalLambdaPlatform;
 import com.faas.dto.EventResponse;
 import com.faas.enums.ApiStatus;
 import com.faas.service.EventService;

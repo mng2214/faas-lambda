@@ -1,4 +1,4 @@
-package com.faas;
+package com.faas.config;
 
 import lombok.Getter;
 import lombok.Setter;

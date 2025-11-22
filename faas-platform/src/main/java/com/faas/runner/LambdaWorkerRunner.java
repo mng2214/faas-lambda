@@ -1,5 +1,4 @@
-package com.faas;
-
+package com.faas.runner;
 
 import com.faas.worker.QueueWorker;
 import jakarta.annotation.PostConstruct;

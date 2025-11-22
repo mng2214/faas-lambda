@@ -1,13 +1,10 @@
-package com.faas;
+package com.faas.storage;
 
 import com.faas.dto.EventRequest;
-import com.faas.storage.WorkerStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
-import java.util.List;
 
 import static com.faas.constants.RedisKeys.*;
 
@@ -72,7 +69,4 @@ public class RedisWorkerStorage implements WorkerStorage {
     public void storeGlobalError(String jsonError) {
         redis.opsForList().rightPush(GLOBAL_ERRORS, jsonError);
     }
-
-
-
 }
