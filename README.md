@@ -19,14 +19,13 @@ This platform allows you to:
 At the core of the system is a highly optimized execution engine based on  
 **Project Loom (Virtual Threads)**, providing:
 
-- **Thousands of concurrent executions** with extremely low memory usage
-- **Dedicated worker pools** per workload type
-- **Full manual control** over worker initialization and lifecycle
-- **`@PostConstruct` auto-startup** and graceful `@PreDestroy` shutdown
-- **Non-blocking Redis operations** for smooth parallel processing
-- **True parallelism** for independent tasks and functions
-- **Zero thread exhaustion**, even under heavy load
-- **Minimal overhead per function call**
+- a high-performance execution engine,
+- a contract-based function system,
+- an auto-discovery function registry,
+- a Redis-backed asynchronous event queue,
+- real-time metrics & dashboards,
+- a modern web UI,
+- dynamic function execution (simple, chain, streaming, webhook).
 
 ### Why scaling is rarely needed?
 
@@ -68,7 +67,15 @@ In most real-world scenarios, a single instance is enough to:
 
 ![Capture](https://github.com/user-attachments/assets/40522f6c-9c15-42b3-88c7-70676f84d9a7)
 
+## Virtual Threads Engine
 
+- Runs thousands of concurrent executions
+- CPU-bound & IO-bound pools
+- Retry logic
+- Streaming and chained executions
+- Graceful start/stop via @PostConstruct/@PreDestroy
+
+  
 ## Features
 
 ### **1. Function Registration**
@@ -161,6 +168,18 @@ You can inspect the raw queue contents via:
 GET /functions/list?key=faas:events
 ```
 
+## Event Flow
+
+1. Client posts:
+```
+POST /events/hello
+```
+2. Platform enqueues event to Redis.
+3. Engine workers consume events.
+4. Function executed via LocalLambdaFunction.
+5. Results/errors stored in Redis.
+6. UI displays metrics, results, queue state
+
 ---
 
 ## Web UI
@@ -191,10 +210,11 @@ faas-service/src/main/resources/templates/list.html
 ## Project Structure
 
 ```
-faas-engine      → worker execution engine
-faas-platform    → Redis + queue + metrics
-faas-functions   → user-defined functions
-faas-service     → web UI + API controllers
+faas-contracts     → contains LocalLambdaFunction and DTOs
+faas-functions     → user-defined functions implementing the contract
+faas-platform      → binds engine + Redis + metrics + registry
+faas-engine        → workers, pipelines, processors
+faas-service       → web UI + API controllers
 ```
 
 ---
@@ -286,40 +306,7 @@ docker run -p 6379:6379 redis
 
 ## Ongoing Development
 
-The platform is actively evolving. Current work includes:
-
-### Result Consumption
-
-A unified mechanism for consuming function results is being added.  
-This includes:
-
-- returning results back to services
-- optional callbacks
-- optional long-polling
-- lightweight notification triggers
-
-This will allow applications to receive execution outcomes efficiently.
-
-### Notification Logic
-
-A notification layer is being implemented to inform services about:
-
-- completed executions
-- failures
-- retries
-- important state changes
-
-### New Function Types
-
-The engine will support additional function types beyond standard handlers:
-
-- WebSocket-based functions
-- streaming/pipe-style functions
-- multi-step chained executions
-
-Short examples of these functions will be added to the repository.
-
-More improvements will follow as the platform grows.
+The platform is actively evolving. 
 
 ---
 
