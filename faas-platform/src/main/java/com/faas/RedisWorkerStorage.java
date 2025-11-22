@@ -57,24 +57,6 @@ public class RedisWorkerStorage implements WorkerStorage {
     }
 
     @Override
-    public long getActiveCount() {
-        String v = redis.opsForValue().get(ACTIVE_INVOCATIONS);
-        return v != null ? Long.parseLong(v) : 0L;
-    }
-
-    @Override
-    public long getProcessedCount() {
-        String v = redis.opsForValue().get(PROCESSED_COUNT);
-        return v != null ? Long.parseLong(v) : 0L;
-    }
-
-    @Override
-    public long getErrorCount() {
-        String v = redis.opsForValue().get(ERROR_COUNT);
-        return v != null ? Long.parseLong(v) : 0L;
-    }
-
-    @Override
     public void storeResult(String functionName, String jsonResult) {
         String key = SUCCESS_LIST_PREFIX + functionName;
         redis.opsForList().rightPush(key, jsonResult);
@@ -91,22 +73,6 @@ public class RedisWorkerStorage implements WorkerStorage {
         redis.opsForList().rightPush(GLOBAL_ERRORS, jsonError);
     }
 
-    @Override
-    public List<String> getFunctionResults(String functionName, int page, int size) {
-        String key = SUCCESS_LIST_PREFIX + functionName;
-        long start = (long) page * size;
-        long end = start + size - 1;
 
-        return redis.opsForList().range(key, start, end);
-    }
-
-    @Override
-    public List<String> getFunctionErrors(String functionName, int page, int size) {
-        String key = FUNCTION_ERRORS_LIST_PREFIX + functionName;
-        long start = (long) page * size;
-        long end = start + size - 1;
-
-        return redis.opsForList().range(key, start, end);
-    }
 
 }

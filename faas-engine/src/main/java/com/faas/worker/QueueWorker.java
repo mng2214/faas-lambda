@@ -1,24 +1,39 @@
 package com.faas.worker;
 
 import com.faas.config.LambdaWorkerConfig;
-import com.faas.storage.WorkerStorage;
-import com.faas.enums.WorkloadType;
 import com.faas.dto.EventRequest;
+import com.faas.enums.WorkloadType;
 import com.faas.function.LocalLambdaFunction;
 import com.faas.registry.FunctionRegistry;
+import com.faas.storage.WorkerStorage;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Core queue worker that:
+ * - polls events from {@link WorkerStorage}
+ * - routes them to appropriate function from {@link FunctionRegistry}
+ * - supports SIMPLE / STREAM / WEBHOOK / CHAIN modes
+ * <p>
+ * Backward compatible:
+ * - If no special fields are present in payload, event is processed in SIMPLE mode.
+ * - WorkerStorage got only *optional* default methods for streaming support.
+ */
 @Slf4j
 public class QueueWorker {
+
+    private static final String KEY_MODE = "_mode";              // SIMPLE / STREAM / WEBHOOK / CHAIN
+    private static final String KEY_CHAIN = "_chain";            // List<String> of function names
+    private static final String KEY_CALLBACK_URL = "_callbackUrl";
+    private static final String KEY_STREAM_ID = "_streamId";
 
     private final WorkerStorage storage;
     private final FunctionRegistry functionRegistry;
@@ -26,29 +41,11 @@ public class QueueWorker {
     private final ObjectMapper objectMapper;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicInteger workerCount = new AtomicInteger(0);
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
-    private final AtomicInteger cpuIndex = new AtomicInteger(0);
 
     private ExecutorService workerExecutor;
-
-    // I/O tasks
-    private final ExecutorService ioExecutor =
-            Executors.newThreadPerTaskExecutor(
-                    Thread.ofVirtual().name("faas-io-", 0).factory()
-            );
-
-    // CPU tasks
-    private final ExecutorService cpuExecutor =
-            Executors.newFixedThreadPool(
-                    Runtime.getRuntime().availableProcessors(),
-                    r -> {
-                        Thread t = new Thread(r);
-                        t.setName("faas-cpu-" + cpuIndex.incrementAndGet());
-                        t.setDaemon(false);
-                        return t;
-                    }
-            );
+    private ExecutorService cpuExecutor;
+    private ExecutorService ioExecutor;
 
     public QueueWorker(WorkerStorage storage,
                        FunctionRegistry functionRegistry,
@@ -62,133 +59,145 @@ public class QueueWorker {
 
     public void start() {
         if (!config.enabled()) {
-            log.info("Local Lambda worker is disabled via configuration");
+            log.warn("QueueWorker is disabled via configuration.");
             return;
         }
 
         if (!running.compareAndSet(false, true)) {
+            log.info("QueueWorker already running.");
             return;
         }
 
-        this.workerExecutor = Executors.newCachedThreadPool(r ->
-                Thread.ofVirtual()
-                        .name("local-lambda-worker-", 0)
-                        .factory()
-                        .newThread(r)
+        int maxWorkers = Math.max(1, config.maxWorkerThreads());
+        this.workerExecutor = Executors.newFixedThreadPool(
+                maxWorkers,
+                r -> {
+                    Thread t = new Thread(r);
+                    t.setName("faas-queue-worker-" + t.getId());
+                    t.setDaemon(false);
+                    return t;
+                }
         );
 
-        workerExecutor.submit(() -> {
+        this.cpuExecutor = Executors.newFixedThreadPool(
+                Runtime.getRuntime().availableProcessors(),
+                new NamedThreadFactory("faas-cpu-")
+        );
+
+        this.ioExecutor = Executors.newCachedThreadPool(
+                new NamedThreadFactory("faas-io-")
+        );
+
+        // warm-up delay
+        if (config.initialDelayMs() > 0) {
             try {
                 Thread.sleep(config.initialDelayMs());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
             }
+        }
 
-            log.info("Starting QueueWorker after initialDelay={}ms", config.initialDelayMs());
-            startWorker(workerCount.incrementAndGet());
-            scheduleAutoscale();
-        });
+        log.info("Starting QueueWorker with {} poller threads", maxWorkers);
+        for (int i = 0; i < maxWorkers; i++) {
+            final int id = i + 1;
+            workerExecutor.submit(() -> startWorkerLoop(id));
+        }
     }
 
     public void stop() {
         if (!running.compareAndSet(true, false)) {
             return;
         }
+        log.info("Stopping QueueWorker...");
 
         if (workerExecutor != null) {
             workerExecutor.shutdownNow();
         }
-
-        ioExecutor.shutdownNow();
-        cpuExecutor.shutdownNow();
-
-        log.info("QueueWorker stopped");
+        if (cpuExecutor != null) {
+            cpuExecutor.shutdown();
+        }
+        if (ioExecutor != null) {
+            ioExecutor.shutdown();
+        }
     }
 
-    /**
-     * A single worker is a loop that:
-     * - Checks the concurrentInvocations limit
-     * - Reads events from the queue
-     * - For each event, launches async processing via CPU/IO executor
-     */
-    private void startWorker(int id) {
-        workerExecutor.submit(() -> {
-            log.info("Worker-{} started", id);
-            while (running.get()) {
-                try {
+    private void startWorkerLoop(int id) {
+        log.info("Worker-{} started", id);
+        Duration pollTimeout = Duration.ofSeconds(Math.max(1, config.pollTimeoutSeconds()));
+        int maxConcurrency = Math.max(1, config.maxConcurrentInvocations());
 
-                    if (concurrentInvocations.get() >= config.maxConcurrentInvocations()) {
-                        // Brief sleep to prevent CPU spinning in tight loop
-                        Thread.sleep(5);
-                        continue;
-                    }
-
-                    EventRequest event = storage.pollNextEvent(
-                            Duration.ofSeconds(config.pollTimeoutSeconds())
-                    );
-
-                    if (event == null) {
-                        continue;
-                    }
-
-                    concurrentInvocations.incrementAndGet();
-                    storage.incrementActive();
-
-                    handleEvent(event)
-                            .whenComplete((ignored, ex) -> {
-                                try {
-                                    if (ex != null) {
-                                        log.error("Unhandled exception in handleEvent completion", ex);
-                                    }
-                                    log.info("Successfully handled");
-                                } finally {
-                                    concurrentInvocations.decrementAndGet();
-                                    storage.decrementActive();
-                                }
-                            });
-
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.info("Worker-{} interrupted, exiting", id);
-                    break;
-                } catch (Exception e) {
-                    log.error("Unexpected error in worker loop", e);
+        while (running.get()) {
+            try {
+                // simple back-pressure based on concurrent invocations
+                if (concurrentInvocations.get() >= maxConcurrency) {
+                    Thread.sleep(5);
+                    continue;
                 }
+
+                EventRequest event = storage.pollNextEvent(pollTimeout);
+                if (event == null) {
+                    continue;
+                }
+
+                concurrentInvocations.incrementAndGet();
+                storage.incrementActive();
+
+                dispatchEvent(event);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.warn("Worker-{} interrupted, exiting loop", id);
+                break;
+            } catch (Exception ex) {
+                log.error("Worker-{} failed to poll event", id, ex);
+                // global storage error marker
+                tryStoreGlobalError("Failed to poll event", ex);
             }
-            log.info("Worker-{} finished", id);
-        });
-    }
-
-    /**
-     * Processes an event asynchronously.
-     * Returns a CompletableFuture that completes once the function execution (including retries) finishes.
-     */
-    private CompletableFuture<Void> handleEvent(EventRequest event) {
-        String functionName = event.getFunctionName();
-        Map<String, Object> payload = event.getPayload();
-
-        LocalLambdaFunction function = functionRegistry.get(functionName);
-        if (function == null) {
-            String msg = "Function not found: " + functionName;
-            log.warn(msg);
-            storage.incrementError();
-            tryStoreGlobalError(msg, null);
-            return CompletableFuture.completedFuture(null);
         }
 
+        log.info("Worker-{} stopped", id);
+    }
+
+    private void dispatchEvent(EventRequest event) {
+        // determine function
+        LocalLambdaFunction function = functionRegistry.get(event.getFunctionName());
+        if (function == null) {
+            log.warn("No function found for name '{}'", event.getFunctionName());
+            storage.incrementError();
+            tryStoreGlobalError("Function not found: " + event.getFunctionName(), null);
+            decrementActive();
+            return;
+        }
+
+        Map<String, Object> payload = safePayload(event);
+
+        String modeRaw = (String) payload.getOrDefault(KEY_MODE, "SIMPLE");
+        String mode = modeRaw == null ? "SIMPLE" : modeRaw.toUpperCase(Locale.ROOT);
+
+        // choose executor based on workload type
         ExecutorService targetExecutor =
-                (function.workloadType() == WorkloadType.CPU_BOUND)
-                        ? cpuExecutor
-                        : ioExecutor;
+                function.workloadType() == WorkloadType.CPU_BOUND ? cpuExecutor : ioExecutor;
 
-        int maxAttempts = Math.max(1, config.maxRetries()); // защита от 0/отрицательных
+        switch (mode) {
+            case "STREAM", "STREAMING" -> targetExecutor.submit(() -> processStream(event, function, payload));
+            case "CHAIN" -> targetExecutor.submit(() -> processChain(event, payload));
+            case "WEBHOOK" -> targetExecutor.submit(() -> processSimple(event, function, payload, true));
+            default -> targetExecutor.submit(() -> processSimple(event, function, payload, false));
+        }
+    }
 
-        return CompletableFuture.runAsync(() -> {
+    // SIMPLE and WEBHOOK share same core logic; WEBHOOK = SIMPLE + callbackUrl in result
+    private void processSimple(EventRequest event,
+                               LocalLambdaFunction function,
+                               Map<String, Object> payload,
+                               boolean webhookMode) {
+        String functionName = event.getFunctionName();
+        int maxAttempts = resolveMaxAttempts(function);
+
+        try {
             int attempt = 0;
-
             while (attempt < maxAttempts) {
                 attempt++;
+                Instant start = Instant.now();
                 try {
                     Map<String, Object> output = function.handle(payload);
 
@@ -200,112 +209,300 @@ public class QueueWorker {
                     record.put("output", output);
                     record.put("status", "success");
                     record.put("timestamp", Instant.now().toString());
+                    record.put("durationMs",
+                            Duration.between(start, Instant.now()).toMillis());
 
-                    String json = objectMapper.writeValueAsString(record);
-                    storage.storeResult(functionName, json);
+                    // callbackUrl support for webhook mode (или если пользователь просто положил его в payload)
+                    Object callbackUrl = payload.get(KEY_CALLBACK_URL);
+                    if (callbackUrl != null) {
+                        record.put("callbackUrl", callbackUrl);
+                    }
+                    if (webhookMode) {
+                        record.put("delivery", "WEBHOOK");
+                    }
 
+                    storage.storeResult(functionName, toJson(record));
                     return;
                 } catch (Exception ex) {
-                    log.error("Error executing function '{}' (attempt {}/{})",
+                    log.warn("Function '{}' attempt {}/{} failed",
                             functionName, attempt, maxAttempts, ex);
-
                     if (attempt >= maxAttempts) {
-                        storage.incrementError();
-                        tryStoreFunctionError(functionName, payload, ex);
-                        return;
+                        markFunctionError(event, functionName, ex);
+                    } else {
+                        Thread.sleep(10L * attempt); // small backoff
                     }
                 }
             }
-        }, targetExecutor);
-    }
-
-    private void tryStoreFunctionError(String functionName,
-                                       Map<String, Object> payload,
-                                       Throwable error) {
-        try {
-            Map<String, Object> record = new HashMap<>();
-            record.put("functionName", functionName);
-            record.put("payload", payload);
-            record.put("status", "error");
-            record.put("timestamp", Instant.now().toString());
-            record.put("errorMessage", error != null ? error.getMessage() : null);
-
-            String json = objectMapper.writeValueAsString(record);
-            storage.storeFunctionError(functionName, json);
-        } catch (Exception e) {
-            log.error("Failed to serialize function error: {}", e.getMessage(), e);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            log.warn("Processing of '{}' interrupted", functionName);
+        } finally {
+            decrementActive();
         }
     }
 
-    private void tryStoreGlobalError(String message, Throwable error) {
-        try {
-            Map<String, Object> record = new HashMap<>();
-            record.put("status", "error");
-            record.put("timestamp", Instant.now().toString());
-            record.put("message", message);
-            if (error != null) {
-                record.put("errorMessage", error.getMessage());
-            }
+    private void processStream(EventRequest event,
+                               LocalLambdaFunction function,
+                               Map<String, Object> payload) {
+        String functionName = event.getFunctionName();
+        String streamId = (String) payload.get(KEY_STREAM_ID);
+        if (!(function instanceof LocalLambdaFunction.Streaming streamingFn)) {
+            log.warn("Function '{}' is not LocalLambdaFunction.Streaming, falling back to SIMPLE", functionName);
+            processSimple(event, function, payload, false);
+            return;
+        }
 
-            String json = objectMapper.writeValueAsString(record);
-            storage.storeGlobalError(json);
-        } catch (Exception e) {
-            log.error("Failed to serialize global error: {}", e.getMessage(), e);
+        try {
+            LocalLambdaFunction.Streaming.StreamEmitter emitter =
+                    new LocalLambdaFunction.Streaming.StreamEmitter() {
+                        @Override
+                        public void next(Object chunk) {
+                            try {
+                                Map<String, Object> record = new HashMap<>();
+                                record.put("eventId", event.getEventId());
+                                record.put("functionName", functionName);
+                                record.put("chunk", chunk);
+                                record.put("timestamp", Instant.now().toString());
+                                if (streamId != null) {
+                                    record.put("streamId", streamId);
+                                }
+                                Object callbackUrl = payload.get(KEY_CALLBACK_URL);
+                                if (callbackUrl != null) {
+                                    record.put("callbackUrl", callbackUrl);
+                                }
+                                storage.appendStreamChunk(
+                                        streamId != null ? streamId : event.getEventId(),
+                                        toJson(record)
+                                );
+                            } catch (Exception e) {
+                                log.error("Failed to store stream chunk for '{}'", functionName, e);
+                            }
+                        }
+
+                        @Override
+                        public void complete() {
+                            try {
+                                storage.completeStream(
+                                        streamId != null ? streamId : event.getEventId()
+                                );
+                            } catch (Exception e) {
+                                log.error("Failed to mark stream complete for '{}'", functionName, e);
+                            }
+                        }
+
+                        @Override
+                        public void error(Throwable t) {
+                            try {
+                                Map<String, Object> record = new HashMap<>();
+                                record.put("eventId", event.getEventId());
+                                record.put("functionName", functionName);
+                                record.put("errorMessage", t.getMessage());
+                                record.put("timestamp", Instant.now().toString());
+                                if (streamId != null) {
+                                    record.put("streamId", streamId);
+                                }
+                                storage.failStream(
+                                        streamId != null ? streamId : event.getEventId(),
+                                        toJson(record)
+                                );
+                            } catch (Exception e) {
+                                log.error("Failed to mark stream error for '{}'", functionName, e);
+                            } finally {
+                                storage.incrementError();
+                            }
+                        }
+                    };
+
+            streamingFn.handleStream(payload, emitter);
+        } catch (Exception ex) {
+            log.error("Streaming function '{}' failed", functionName, ex);
+            storage.incrementError();
+            tryStoreFunctionError(event, functionName, ex);
+        } finally {
+            // one logical streaming invocation is finished
+            decrementActive();
         }
     }
 
     /**
-     * Autoscaling: periodically checks queue length and worker count,
-     * adds more workers if the queue is growing.
+     * Simple pipeline:
+     * payload._chain = ["f1", "f2", "f3"]
+     * result of fn1 → input fn2 → input fn3
      */
-    private void scheduleAutoscale() {
-        workerExecutor.submit(() -> {
-            while (running.get()) {
-                try {
-                    long queueLen = storage.getQueueLength();
-                    int desired = calculateDesiredWorkers(queueLen);
-                    int current = workerCount.get();
+    @SuppressWarnings("unchecked")
+    private void processChain(EventRequest event, Map<String, Object> payload) {
+        Object rawChain = payload.get(KEY_CHAIN);
+        if (!(rawChain instanceof List<?> chainList) || chainList.isEmpty()) {
+            log.warn("CHAIN mode event '{}' has no '{}' list", event.getEventId(), KEY_CHAIN);
+            // fallback – просто обычный вызов основной функции
+            LocalLambdaFunction fn = functionRegistry.get(event.getFunctionName());
+            if (fn == null) {
+                storage.incrementError();
+                tryStoreGlobalError("Function not found for CHAIN fallback: " + event.getFunctionName(), null);
+                decrementActive();
+                return;
+            }
+            processSimple(event, fn, payload, false);
+            return;
+        }
 
-                    if (desired > current) {
-                        int toAdd = desired - current;
-                        for (int i = 0; i < toAdd; i++) {
-                            int id = workerCount.incrementAndGet();
-                            startWorker(id);
+        Map<String, Object> current = new HashMap<>(payload);
+        // remove control fields from input to first function
+        current.remove(KEY_MODE);
+        current.remove(KEY_CHAIN);
+
+        String pipelineName = event.getFunctionName();
+
+        try {
+            for (Object stepObj : chainList) {
+                if (!(stepObj instanceof String stepName)) {
+                    log.warn("Invalid step name in chain for event '{}': {}", event.getEventId(), stepObj);
+                    storage.incrementError();
+                    tryStoreGlobalError("Invalid chain step: " + stepObj, null);
+                    decrementActive();
+                    return;
+                }
+
+                LocalLambdaFunction stepFn = functionRegistry.get(stepName);
+                if (stepFn == null) {
+                    log.warn("Chain step '{}' not found", stepName);
+                    storage.incrementError();
+                    tryStoreGlobalError("Chain step not found: " + stepName, null);
+                    decrementActive();
+                    return;
+                }
+
+                int maxAttempts = resolveMaxAttempts(stepFn);
+                int attempt = 0;
+                boolean success = false;
+                while (attempt < maxAttempts && !success) {
+                    attempt++;
+                    try {
+                        current = stepFn.handle(current);
+                        success = true;
+                    } catch (Exception ex) {
+                        log.warn("Chain step '{}' attempt {}/{} failed",
+                                stepName, attempt, maxAttempts, ex);
+                        if (attempt >= maxAttempts) {
+                            tryStoreFunctionError(event, stepName, ex);
+                            storage.incrementError();
+                            decrementActive();
+                            return;
+                        } else {
+                            Thread.sleep(10L * attempt);
                         }
-
-                        log.info("Scaled workers: current={}, desired={}, queueLen={}",
-                                workerCount.get(), desired, queueLen);
                     }
-
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                } catch (Exception e) {
-                    log.error("Error in autoscale loop", e);
                 }
             }
-        });
+
+            storage.incrementProcessed();
+
+            Map<String, Object> record = new HashMap<>();
+            record.put("eventId", event.getEventId());
+            record.put("functionName", pipelineName);
+            record.put("output", current);
+            record.put("status", "success");
+            record.put("timestamp", Instant.now().toString());
+            record.put("chain", rawChain);
+
+            Object callbackUrl = payload.get(KEY_CALLBACK_URL);
+            if (callbackUrl != null) {
+                record.put("callbackUrl", callbackUrl);
+            }
+
+            storage.storeResult(pipelineName, toJson(record));
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            log.warn("CHAIN for '{}' interrupted", pipelineName);
+        } catch (Exception ex) {
+            log.error("CHAIN for '{}' failed", pipelineName, ex);
+            storage.incrementError();
+            tryStoreFunctionError(event, pipelineName, ex);
+        } finally {
+            decrementActive();
+        }
     }
 
-    private int calculateDesiredWorkers(long queueLen) {
-        int maxWorkers = Math.max(1, config.maxWorkerThreads());
+    // ---------- helpers ----------
 
-        if (queueLen <= 0) {
+    private Map<String, Object> safePayload(EventRequest event) {
+        Map<String, Object> payload = event.getPayload();
+        return payload != null ? payload : new HashMap<>();
+    }
+
+    private int resolveMaxAttempts(LocalLambdaFunction fn) {
+        int fnMax = fn.maxRetries();
+        int cfgMax = config.maxRetries();
+        if (fnMax <= 0 && cfgMax <= 0) {
             return 1;
         }
-
-        int maxConcurrency = Math.max(1, config.maxConcurrentInvocations());
-        long targetPerWorker = Math.max(1L, maxConcurrency / maxWorkers);
-        long needed = (queueLen + targetPerWorker - 1) / targetPerWorker;
-
-        if (needed < 1) {
-            needed = 1;
+        if (fnMax <= 0) {
+            return cfgMax;
         }
-        if (needed > maxWorkers) {
-            needed = maxWorkers;
+        if (cfgMax <= 0) {
+            return fnMax;
         }
-        return (int) needed;
+        return Math.min(fnMax, cfgMax);
     }
 
+    private String toJson(Object value) throws JsonProcessingException {
+        return objectMapper.writeValueAsString(value);
+    }
+
+    private void markFunctionError(EventRequest event, String functionName, Exception ex) {
+        storage.incrementError();
+        tryStoreFunctionError(event, functionName, ex);
+    }
+
+    private void tryStoreFunctionError(EventRequest event, String functionName, Exception ex) {
+        try {
+            Map<String, Object> error = new HashMap<>();
+            error.put("eventId", event.getEventId());
+            error.put("functionName", functionName);
+            error.put("errorMessage", ex.getMessage());
+            error.put("timestamp", Instant.now().toString());
+            storage.storeFunctionError(functionName, toJson(error));
+        } catch (Exception e) {
+            log.error("Failed to store function error for '{}'", functionName, e);
+        }
+    }
+
+    private void tryStoreGlobalError(String message, Exception ex) {
+        try {
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", message);
+            error.put("timestamp", Instant.now().toString());
+            if (ex != null) {
+                error.put("errorMessage", ex.getMessage());
+            }
+            storage.storeGlobalError(toJson(error));
+        } catch (Exception e) {
+            log.error("Failed to store global error", e);
+        }
+    }
+
+    private void decrementActive() {
+        storage.decrementActive();
+        concurrentInvocations.decrementAndGet();
+    }
+
+    /**
+     * Simple named thread factory for executors.
+     */
+    private static class NamedThreadFactory implements ThreadFactory {
+        private final String prefix;
+        private final AtomicInteger index = new AtomicInteger(0);
+
+        private NamedThreadFactory(String prefix) {
+            this.prefix = prefix;
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r);
+            t.setName(prefix + index.incrementAndGet());
+            t.setDaemon(false);
+            return t;
+        }
+    }
 }
