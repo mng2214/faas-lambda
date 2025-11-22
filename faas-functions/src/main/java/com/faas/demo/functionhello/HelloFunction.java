@@ -20,12 +20,24 @@ public class HelloFunction implements LocalLambdaFunction {
 //        return WorkloadType.CPU_BOUND;
 //    }
 
+    private final int[] a = new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+    private final int[] b = new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+
+    long sum = 0;
+
     @Override
     public Map<String, Object> handle(Map<String, Object> input) {
         String name = (String) input.getOrDefault("name", "world");
         if (name.equalsIgnoreCase("fail")) {
             throw new RuntimeException("Expected Fail Simulation");
         }
+
+        for (int k : a) {
+            for (int i : b) {
+                sum += k + i;
+            }
+        }
+
 //            try {
 //                Thread.sleep(1000);
 //            } catch (InterruptedException e) {

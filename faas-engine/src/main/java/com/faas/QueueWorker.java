@@ -110,9 +110,9 @@ public class QueueWorker {
 
     /**
      * Один "воркер" — это цикл, который:
-     *  - смотрит на лимит concurrentInvocations
-     *  - читает события из очереди
-     *  - на каждое событие запускает async обработку через CPU/IO executor
+     * - смотрит на лимит concurrentInvocations
+     * - читает события из очереди
+     * - на каждое событие запускает async обработку через CPU/IO executor
      */
     private void startWorker(int id) {
         workerExecutor.submit(() -> {
@@ -145,6 +145,7 @@ public class QueueWorker {
                                     if (ex != null) {
                                         log.error("Unhandled exception in handleEvent completion", ex);
                                     }
+                                    log.info("Successfully handled");
                                 } finally {
                                     // когда функция реально завершилась — уменьшаем счётчики
                                     concurrentInvocations.decrementAndGet();
@@ -297,13 +298,31 @@ public class QueueWorker {
     }
 
     private int calculateDesiredWorkers(long queueLen) {
+        int maxWorkers = Math.max(1, config.maxWorkerThreads());
+
+        // если очереди нет — держим одного воркера
         if (queueLen <= 0) {
             return 1;
         }
-        long workers = Math.min(
-                config.maxWorkerThreads(),
-                Math.max(1, queueLen / 10)
-        );
-        return (int) workers;
+
+        // Сколько одновременных вызовов вообще разрешено (из yaml)
+        int maxConcurrency = Math.max(1, config.maxConcurrentInvocations());
+
+        // Сколько задач в среднем должен тащить один воркер,
+        // исходя из maxConcurrency и maxWorkers
+        long targetPerWorker = Math.max(1L, maxConcurrency / maxWorkers);
+
+        // Сколько воркеров нужно, чтобы "переварить" текущую очередь
+        long needed = (queueLen + targetPerWorker - 1) / targetPerWorker; // ceil
+
+        if (needed < 1) {
+            needed = 1;
+        }
+        if (needed > maxWorkers) {
+            needed = maxWorkers;
+        }
+
+        return (int) needed;
     }
+
 }
