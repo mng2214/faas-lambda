@@ -37,18 +37,18 @@
             font-weight: 600;
             color: white;
             margin-bottom: 10px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
 
         .header p {
-            color: rgba(255,255,255,0.8);
+            color: rgba(255, 255, 255, 0.8);
             font-size: 1.1rem;
         }
 
         .card {
             background: white;
             border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             animation: slideUp 0.6s ease-out;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -57,7 +57,7 @@
 
         .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
         }
 
         .card-content {
@@ -138,7 +138,7 @@
 
         .btn-secondary:hover {
             background: #cbd5e0;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
 
         /* Table Styles */
@@ -203,7 +203,7 @@
             background: white;
             border-radius: 16px;
             padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             animation: slideUp 0.6s ease-out 0.2s both;
         }
 
@@ -304,8 +304,12 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
         }
 
         .pulse {
@@ -313,9 +317,15 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
         }
 
         /* Responsive */
@@ -344,6 +354,19 @@
             .pagination {
                 flex-direction: column;
                 gap: 15px;
+            }
+        }
+
+        .spin {
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
             }
         }
     </style>
@@ -379,8 +402,9 @@
                 </div>
             </div>
 
-            <button type="button" class="btn" onclick="refreshMetrics()">
-                <i class="fas fa-sync-alt"></i> Refresh Metrics
+            <button type="button" class="btn" id="refresh-btn" onclick="refreshMetrics()">
+                <i class="fas fa-sync-alt" id="refresh-icon"></i>
+                Refresh Metrics
             </button>
         </div>
     </div>
@@ -469,7 +493,18 @@
     let currentPage = 0;
     const pageSize = 20;
 
+    setInterval(() => {
+        if (currentMode !== null) {
+            loadPage();
+        }
+    }, 5000);
+
+    setInterval(refreshMetrics, 10000);
+
     function refreshMetrics() {
+        const icon = document.getElementById("refresh-icon");
+        icon.classList.add("spin");
+
         fetch('/functions/metrics')
             .then(r => r.json())
             .then(m => {
@@ -478,15 +513,19 @@
                 document.getElementById('m-processed').textContent = (m.processedCount || 0);
                 document.getElementById('m-errors').textContent = (m.errorCount || 0);
 
-                // Add pulse animation to updated metrics
+                // Pulse animation
                 const metrics = document.querySelectorAll('.metric-card');
                 metrics.forEach(metric => {
                     metric.classList.add('pulse');
                     setTimeout(() => metric.classList.remove('pulse'), 1000);
                 });
             })
-            .catch(err => console.error('metrics error', err));
+            .catch(err => console.error('metrics error', err))
+            .finally(() => {
+                setTimeout(() => icon.classList.remove("spin"), 600);
+            });
     }
+
 
     function openFunctionResults(fnName, page) {
         currentMode = 'results';
@@ -526,7 +565,7 @@
         } else if (currentMode === 'errors') {
             url = '/functions/errors/' + encodeURIComponent(currentFn);
         } else if (currentMode === 'key') {
-            url = '/functions/list?key=' + encodeURIComponent(currentKey);
+            url = '/functions/catalog?key=' + encodeURIComponent(currentKey);
         } else {
             return;
         }
@@ -554,7 +593,11 @@
 
                 let html = '';
                 list.forEach((item, index) => {
-                    html += "<div class='list-item' style='animation-delay: " + (index * 0.1) + "s'>" + escapeHtml(item) + "</div>";
+                    const delay = (index * 0.1).toFixed(2) + "s";
+
+                    html += "<div class='list-item' style='animation-delay: " + delay + "'>"
+                        + escapeHtml(item)
+                        + "</div>";
                 });
                 container.innerHTML = html;
             })

@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 @Controller
-@RequestMapping("/ui/functions")
+@RequestMapping("/ui/catalog")
 public class FunctionCatalogPageController {
 
     private final LocalLambdaPlatform platform;
@@ -19,6 +19,6 @@ public class FunctionCatalogPageController {
     @GetMapping
     public String list(Model model) {
         model.addAttribute("functions", platform.listFunctions());
-        return "functions/list";
+        return "functions/catalog";
     }
 }
