@@ -63,9 +63,17 @@ In most real-world scenarios, a single instance is enough to:
         }
 ```
 
-## Results 
+# FaaS Engine Peak Performance Results
 
-![Capture](https://github.com/user-attachments/assets/40522f6c-9c15-42b3-88c7-70676f84d9a7)
+| Metric | Value |
+|-------|-------|
+| Total Requests | 100,000 |
+| Throughput | ~9,688 req/sec |
+| Duration | ~ 10 sec |
+| Avg Response Time | 8 ms |
+| Median (p50) | 8 ms |
+| Max | 240 ms |
+| Error Rate | 0.00% |
 
 ## Virtual Threads Engine
 
