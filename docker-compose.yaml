@@ -1,0 +1,17 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  local-lambda:
+    build:
+      .
+    container_name: lambda
+    ports:
+      - "2222:2222"
+    environment:
+      - SPRING_DATA_REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
