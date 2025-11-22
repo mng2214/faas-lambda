@@ -46,6 +46,7 @@ In most real-world scenarios, a single instance is enough to:
 - serve as a local FaaS engine,
 - run on Raspberry Pi or small servers.
 
+![Capture](https://github.com/user-attachments/assets/f1b9e7ba-d4a1-4b59-89ec-94fcbff9ba4c)
 ---
 
 ## Features
