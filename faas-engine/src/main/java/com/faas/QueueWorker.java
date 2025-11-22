@@ -1,8 +1,10 @@
 package com.faas;
 
+import com.faas.enums.WorkloadType;
 import com.faas.model.FunctionEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -23,6 +25,7 @@ public class QueueWorker {
 
     private final AtomicInteger workerCount = new AtomicInteger(0);
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
+    private final AtomicInteger cpuIndex = new AtomicInteger(0);
 
     private ExecutorService executor;
 
@@ -82,17 +85,14 @@ public class QueueWorker {
                         continue;
                     }
 
-                    // Берём событие из очереди
                     FunctionEvent event = storage.pollNextEvent(
                             Duration.ofSeconds(config.pollTimeoutSeconds())
                     );
 
-                    // ⚠️ Если событий нет — вообще не трогаем active_invocations
                     if (event == null) {
                         continue;
                     }
 
-                    // ✅ СЧЁТЧИКИ УВЕЛИЧИВАЕМ ОДИН РАЗ
                     concurrentInvocations.incrementAndGet();
                     storage.incrementActive();
 
@@ -117,6 +117,23 @@ public class QueueWorker {
         });
     }
 
+    // I/O задачи — в виртуальные потоки
+    private final ExecutorService ioExecutor =
+            Executors.newThreadPerTaskExecutor(
+                    Thread.ofVirtual().name("faas-io-", 0).factory()
+            );
+
+    // CPU задачи — в реальные потоки
+    private final ExecutorService cpuExecutor =
+            Executors.newFixedThreadPool(
+                    Runtime.getRuntime().availableProcessors(),
+                    r -> {
+                        Thread t = new Thread(r);
+                        t.setName("faas-cpu-" + cpuIndex.incrementAndGet());
+                        t.setDaemon(false);
+                        return t;
+                    }
+            );
 
     private void handleEvent(FunctionEvent event) {
         String functionName = event.getFunctionName();
@@ -126,42 +143,56 @@ public class QueueWorker {
         if (function == null) {
             String msg = "Function not found: " + functionName;
             log.warn(msg);
-            tryStoreGlobalError(msg, null);
             storage.incrementError();
+            tryStoreGlobalError(msg, null);
             return;
         }
 
-        int attempt = 0;
-        while (attempt <= config.maxRetries()) {
-            attempt++;
-            try {
-                Map<String, Object> output = function.handle(payload);
+        ExecutorService executor =
+                (function.workloadType() == WorkloadType.CPU_BOUND)
+                        ? cpuExecutor
+                        : ioExecutor;
 
-                storage.incrementProcessed();
+        Runnable task = () -> {
+            int attempt = 0;
+            int maxAttempts = config.maxRetries(); // теперь это ОБЩЕЕ ЧИСЛО попыток
 
-                Map<String, Object> record = new HashMap<>();
-                record.put("eventId", event.getEventId());
-                record.put("functionName", functionName);
-                record.put("output", output);
-                record.put("status", "success");
-                record.put("timestamp", Instant.now().toString());
+            while (attempt < maxAttempts) {
+                attempt++;
+                try {
+                    Map<String, Object> output = function.handle(payload);
 
-                String json = objectMapper.writeValueAsString(record);
-                storage.storeResult(functionName, json);
+                    storage.incrementProcessed();
 
-                return;
-            } catch (Exception ex) {
-                log.error("Error executing function '{}' (attempt {}/{})",
-                        functionName, attempt, config.maxRetries() + 1, ex);
+                    Map<String, Object> record = new HashMap<>();
+                    record.put("eventId", event.getEventId());
+                    record.put("functionName", functionName);
+                    record.put("output", output);
+                    record.put("status", "success");
+                    record.put("timestamp", Instant.now().toString());
 
-                if (attempt > config.maxRetries()) {
-                    storage.incrementError();
-                    tryStoreFunctionError(functionName, payload, ex);
-                    return;
+                    String json = objectMapper.writeValueAsString(record);
+                    storage.storeResult(functionName, json);
+
+                    return; // успех — выходим
+                } catch (Exception ex) {
+                    log.error("Error executing function '{}' (attempt {}/{})",
+                            functionName, attempt, maxAttempts, ex);
+
+                    // если это была ПОСЛЕДНЯЯ попытка
+                    if (attempt >= maxAttempts) {
+                        storage.incrementError();
+                        tryStoreFunctionError(functionName, payload, ex);
+                        return;
+                    }
+                    // иначе — просто пойдём на следующую итерацию (retry)
                 }
             }
-        }
+        };
+
+        executor.submit(task);
     }
+
 
     private void tryStoreFunctionError(String functionName,
                                        Map<String, Object> payload,

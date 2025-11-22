@@ -1,6 +1,7 @@
 package com.faas.demo.functionhello;
 
 import com.faas.LocalLambdaFunction;
+import com.faas.enums.WorkloadType;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -12,6 +13,11 @@ public class HelloFunction implements LocalLambdaFunction {
     @Override
     public String getName() {
         return "hello";
+    }
+
+    @Override
+    public WorkloadType workloadType() {
+        return WorkloadType.CPU_BOUND;
     }
 
     @Override

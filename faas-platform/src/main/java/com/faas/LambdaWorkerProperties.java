@@ -5,12 +5,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-/**
- * Конфиг для воркера, подтягивается из application.yml.
- */
 @Getter
 @Component
-@ConfigurationProperties(prefix = "app") // можешь поменять на "faas"
+@ConfigurationProperties(prefix = "app")
 public class LambdaWorkerProperties {
 
     private final Worker worker = new Worker();
@@ -22,7 +19,6 @@ public class LambdaWorkerProperties {
         private boolean enabled = true;
         private long initialDelay = 5_000L;
         private long timeoutSeconds = 30L;
-
     }
 
     @Setter
