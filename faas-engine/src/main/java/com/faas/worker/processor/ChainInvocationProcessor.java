@@ -17,7 +17,7 @@ import java.util.Map;
 /**
  * CHAIN mode:
  * payload._chain = ["f1", "f2", "f3"]
- * результат fn1 → input fn2 → input fn3
+ * The result of fn1 → becomes input for fn2 → becomes input for fn3
  */
 @Slf4j
 public class ChainInvocationProcessor {
@@ -47,12 +47,11 @@ public class ChainInvocationProcessor {
         this.onInvocationFinished = onInvocationFinished;
     }
 
-    @SuppressWarnings("unchecked")
     public void processChain(EventRequest event, Map<String, Object> payload) {
         Object rawChain = payload.get(KEY_CHAIN);
         if (!(rawChain instanceof List<?> chainList) || chainList.isEmpty()) {
             log.warn("CHAIN mode event '{}' has no '{}' list", event.getEventId(), KEY_CHAIN);
-            // fallback – обычный вызов основной функции
+            // fallback – regular func
             LocalLambdaFunction fn = functionRegistry.get(event.getFunctionName());
             if (fn == null) {
                 storage.incrementError();
@@ -65,7 +64,7 @@ public class ChainInvocationProcessor {
         }
 
         Map<String, Object> current = new HashMap<>(payload);
-        // удаляем управляющие поля перед первым шагом
+        // remove control fields before the first step
         current.remove(KEY_MODE);
         current.remove(KEY_CHAIN);
 

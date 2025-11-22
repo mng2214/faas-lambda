@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * SIMPLE / WEBHOOK обработки.
+ * SIMPLE / WEBHOOK processing.
  */
 @Slf4j
 public class SimpleInvocationProcessor {
@@ -79,7 +79,7 @@ public class SimpleInvocationProcessor {
                     if (attempt >= maxAttempts) {
                         markFunctionError(event, functionName, ex);
                     } else {
-                        Thread.sleep(10L * attempt); // небольшой backoff
+                        Thread.sleep(10L * attempt); // backoff
                     }
                 }
             }

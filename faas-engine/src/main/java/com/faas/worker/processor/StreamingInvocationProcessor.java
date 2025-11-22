@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * STREAM / STREAMING режим.
+ * STREAM / STREAMING mode.
  */
 @Slf4j
 public class StreamingInvocationProcessor {

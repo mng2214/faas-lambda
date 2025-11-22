@@ -34,20 +34,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class QueueWorker {
 
-    // ---- спец-поля протокола ----
+    // ---- protocol special fields ----
     static final String KEY_MODE = "_mode";              // SIMPLE / STREAM / WEBHOOK / CHAIN
 
     static final String KEY_CHAIN = "_chain";            // List<String> of function names
     static final String KEY_CALLBACK_URL = "_callbackUrl";
     static final String KEY_STREAM_ID = "_streamId";
 
-    // ---- зависимости ----
+    // ---- dependencies ----
     private final WorkerStorage storage;
     private final FunctionRegistry functionRegistry;
     private final LambdaWorkerConfig config;
     private final ObjectMapper objectMapper;
 
-    // ---- состояние воркера ----
+    // ---- worker state ----
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
 
@@ -55,7 +55,7 @@ public class QueueWorker {
     private ExecutorService cpuExecutor;
     private ExecutorService ioExecutor;
 
-    // ---- обработчики режимов ----
+    // ---- mode handlers ----
     private final SimpleInvocationProcessor simpleProcessor;
     private final StreamingInvocationProcessor streamingProcessor;
     private final ChainInvocationProcessor chainProcessor;
@@ -69,7 +69,7 @@ public class QueueWorker {
         this.config = config;
         this.objectMapper = objectMapper;
 
-        // callback, который должен вызываться после любого завершения инвокации
+        // callback that should be called after any invocation completion
         Runnable onInvocationFinished = this::decrementActive;
 
         this.simpleProcessor =
@@ -162,7 +162,7 @@ public class QueueWorker {
 
         while (running.get()) {
             try {
-                // простая back-pressure по concurrentInvocations
+                // simple back-pressure based on concurrentInvocations
                 if (concurrentInvocations.get() >= maxConcurrency) {
                     Thread.sleep(5);
                     continue;
@@ -183,7 +183,7 @@ public class QueueWorker {
                 break;
             } catch (Exception ex) {
                 log.error("Worker-{} failed to poll event", id, ex);
-                // глобальная ошибка storage
+                // global storage error
                 tryStoreGlobalError("Failed to poll event", ex);
             }
         }
@@ -196,7 +196,7 @@ public class QueueWorker {
     // ========================================================================
 
     private void dispatchEvent(EventRequest event) {
-        // определяем функцию
+        // determine function
         LocalLambdaFunction function = functionRegistry.get(event.getFunctionName());
         if (function == null) {
             log.warn("No function found for name '{}'", event.getFunctionName());
@@ -211,7 +211,7 @@ public class QueueWorker {
         String modeRaw = (String) payload.getOrDefault(KEY_MODE, "SIMPLE");
         String mode = modeRaw == null ? "SIMPLE" : modeRaw.toUpperCase(Locale.ROOT);
 
-        // выбираем executor по типу нагрузки
+        // select executor based on workload type
         ExecutorService targetExecutor =
                 function.workloadType() == WorkloadType.CPU_BOUND ? cpuExecutor : ioExecutor;
 

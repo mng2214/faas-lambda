@@ -6,5 +6,4 @@ public record LambdaWorkerConfig(boolean enabled,
                                  int maxRetries,
                                  int maxWorkerThreads,
                                  int maxConcurrentInvocations) {
-
 }
