@@ -1,6 +1,7 @@
 package com.faas;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,6 +28,6 @@ public class FunctionRegistry {
     }
 
     public Map<String, LocalLambdaFunction> getAll() {
-        return Map.copyOf(functions);
+        return Collections.unmodifiableMap(functions);
     }
 }

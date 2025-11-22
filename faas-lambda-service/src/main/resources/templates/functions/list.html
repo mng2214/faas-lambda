@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaaS - Lambda Functions Catalog</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header p {
+            color: rgba(255,255,255,0.8);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            animation: slideUp 0.6s ease-out;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #4f6aea 0%, #6a49a2 100%);
+            color: white;
+        }
+
+        thead th {
+            padding: 18px 16px;
+            text-align: left;
+            font-weight: 500;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        thead th:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        thead th i {
+            margin-left: 8px;
+            opacity: 0.7;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+            transition: all 0.3s ease;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background-color: #f8f9ff;
+            transform: scale(1.01);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+
+        tbody td {
+            padding: 16px;
+            font-size: 0.9rem;
+        }
+
+        .workload-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .workload-cpu {
+            background: #ffeaea;
+            color: #d63031;
+        }
+
+        .workload-io {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .retries-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #f0f0f0;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        .function-name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .function-description {
+            color: #718096;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            background: rgba(255,255,255,0.1);
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            backdrop-filter: blur(10px);
+            animation: fadeIn 1s ease-out 0.5s both;
+        }
+
+        .stat {
+            text-align: center;
+            color: white;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 600;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        /* маленькая иконка info */
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.8);
+            font-size: 10px;
+            margin-left: 6px;
+            cursor: default;
+            opacity: 0.8;
+        }
+
+        .info-icon-dark {
+            border-color: #a0aec0;
+            color: #4a5568;
+        }
+
+        .info-icon:hover {
+            opacity: 1;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 10px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+            }
+
+            .stats-bar {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1><i class="fas fa-cloud"></i> FaaS Functions Catalog</h1>
+        <p>Manage and monitor your serverless functions</p>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat">
+            <span class="stat-value" th:text="${functions.size()}">0</span>
+            <span class="stat-label">Total Functions</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" th:text="${cpuFunctions}">0</span>
+            <span class="stat-label">
+                CPU Bound
+                <span class="info-icon" title="CPU-bound: функции тратят основное время на вычисления (CPU), мало ожидания I/O.">i</span>
+            </span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" th:text="${ioFunctions}">0</span>
+            <span class="stat-label">
+                I/O Bound
+                <span class="info-icon" title="I/O-bound: функции много ждут сети/диска, хорошо масштабируются на виртуальных потоках.">i</span>
+            </span>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 30px;">
+        <table>
+            <thead>
+            <tr>
+                <th>Name <i class="fas fa-sort"></i></th>
+                <th>Display Name <i class="fas fa-sort"></i></th>
+                <th>Description <i class="fas fa-sort"></i></th>
+                <th>
+                    Workload
+                    <span class="info-icon info-icon-dark"
+                          title="CPU-bound: тяжёлые вычисления. I/O-bound: ожидание сетевых/дисковых операций.">
+                        i
+                    </span>
+                </th>
+                <th>Max Retries <i class="fas fa-sort"></i></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="fn, status : ${functions}" th:classappend="${status.odd} ? 'odd-row' : 'even-row'">
+                <td>
+                    <span class="function-name" th:text="${fn.name}">Function Name</span>
+                </td>
+                <td th:text="${fn.displayName}">Display Name</td>
+                <td>
+                    <span class="function-description" th:text="${fn.description}">Function description</span>
+                </td>
+                <td>
+                    <span th:classappend="'workload-badge workload-' + ${fn.workloadType?.name().toLowerCase()}"
+                          th:text="${fn.workloadType}"
+                          th:attr="title=${fn.workloadType?.name() == 'CPU_BOUND'} ? 'CPU-bound: heavy CPU computations.' : 'I/O-bound: lots of waiting on network/disk.'">
+                        WORKLOAD
+                    </span>
+                </td>
+                <td>
+                    <span class="retries-badge" th:text="${fn.maxRetries}">3</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // Add interactive animations
+    document.addEventListener('DOMContentLoaded', function() {
+        const tableRows = document.querySelectorAll('tbody tr');
+
+        // Staggered animation for table rows
+        tableRows.forEach((row, index) => {
+            row.style.animationDelay = `${index * 0.1}s`;
+            row.classList.add('slideUp');
+        });
+
+        // Add sorting visual feedback (пока без реальной сортировки)
+        const headers = document.querySelectorAll('thead th');
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                header.style.background = 'rgba(255,255,255,0.2)';
+                setTimeout(() => {
+                    header.style.background = '';
+                }, 300);
+            });
+        });
+
+        // Pulse animation for stats
+        const stats = document.querySelectorAll('.stat');
+        stats.forEach((stat, index) => {
+            setTimeout(() => {
+                stat.classList.add('pulse');
+            }, index * 200);
+        });
+    });
+</script>
+</body>
+</html>

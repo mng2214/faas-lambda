@@ -6,11 +6,24 @@ import java.util.Map;
 
 public interface LocalLambdaFunction {
 
-    String getName();
 
     default WorkloadType workloadType() {
         return WorkloadType.IO_BOUND;
     }
 
-    Map<String, Object> handle (Map<String, Object> input);
+    default int maxRetries() {
+        return 3;
+    }
+
+    default String description() {
+        return "No description provided.";
+    }
+
+    default String displayName() {
+        return getName();
+    }
+
+    String getName();
+
+    Map<String, Object> handle(Map<String, Object> input);
 }

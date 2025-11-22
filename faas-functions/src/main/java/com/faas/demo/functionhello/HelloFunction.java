@@ -14,6 +14,16 @@ public class HelloFunction implements LocalLambdaFunction {
         return "hello";
     }
 
+    @Override
+    public String displayName() {
+        return "Hello lambda function";
+    }
+
+    @Override
+    public String description() {
+        return "Return 'hi' message with a time stamp after small 2d loop compute.";
+    }
+
 //    @Override
 //    public WorkloadType workloadType() {
 //        return WorkloadType.CPU_BOUND;
