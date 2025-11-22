@@ -1,6 +1,6 @@
 package com.faas;
 
-import com.faas.model.FunctionEvent;
+import com.faas.dto.EventRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -13,12 +13,7 @@ import java.util.UUID;
 import static com.faas.constants.RedisKeys.EVENTS_QUEUE;
 
 
-/**
- * ПЛАТФОРМА:
- * - знает, какие функции зарегистрированы
- * - умеет ставить события в очередь
- * - предоставляет метод проверки существования функции
- */
+
 @Service
 public class LocalLambdaPlatform {
 
@@ -34,19 +29,10 @@ public class LocalLambdaPlatform {
         this.functionRegistry = functionRegistry;
     }
 
-    /**
-     * Проверка существования функции по имени.
-     */
     public boolean functionExists(String functionName) {
         return functionRegistry.exists(functionName);
     }
 
-    /**
-     * Поставить событие в очередь.
-     * Если функции нет — кидаем своё исключение.
-     *
-     * @return eventId, по которому можно трекать результат
-     */
     public String enqueueEvent(String functionName,
                                Map<String, Object> payload) {
 
@@ -56,7 +42,7 @@ public class LocalLambdaPlatform {
 
         String eventId = UUID.randomUUID().toString();
 
-        FunctionEvent event = new FunctionEvent(
+        EventRequest event = new EventRequest(
                 eventId,
                 functionName,
                 payload != null ? payload : Map.of()
@@ -69,7 +55,7 @@ public class LocalLambdaPlatform {
         return eventId;
     }
 
-    private String serializeEvent(FunctionEvent event) {
+    private String serializeEvent(EventRequest event) {
         try {
             return objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException e) {

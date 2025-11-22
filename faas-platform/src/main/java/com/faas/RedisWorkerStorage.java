@@ -1,6 +1,6 @@
 package com.faas;
 
-import com.faas.model.FunctionEvent;
+import com.faas.dto.EventRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -9,10 +9,6 @@ import java.time.Duration;
 
 import static com.faas.constants.RedisKeys.*;
 
-
-/**
- * Реализация WorkerStorage на Redis.
- */
 public class RedisWorkerStorage implements WorkerStorage {
 
     private final StringRedisTemplate redis;
@@ -24,12 +20,12 @@ public class RedisWorkerStorage implements WorkerStorage {
     }
 
     @Override
-    public FunctionEvent pollNextEvent(Duration timeout) throws Exception {
+    public EventRequest pollNextEvent(Duration timeout) throws Exception {
         String json = redis.opsForList().leftPop(EVENTS_QUEUE, timeout);
         if (json == null) {
             return null;
         }
-        return objectMapper.readValue(json, FunctionEvent.class);
+        return objectMapper.readValue(json, EventRequest.class);
     }
 
     @Override

@@ -12,7 +12,6 @@ public class RedisConfig {
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory() {
-        // host/port можно задать через application.yml
         return new LettuceConnectionFactory();
     }
 

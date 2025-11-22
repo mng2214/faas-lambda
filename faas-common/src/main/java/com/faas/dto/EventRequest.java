@@ -1,4 +1,4 @@
-package com.faas.model;
+package com.faas.dto;
 
 
 import lombok.AllArgsConstructor;
@@ -12,7 +12,7 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class FunctionEvent {
+public class EventRequest {
     private String eventId;
     private String functionName;
     private Map<String, Object> payload;

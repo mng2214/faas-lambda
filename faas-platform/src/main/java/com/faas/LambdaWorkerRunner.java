@@ -7,9 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Платформа: старт/стоп воркера при запуске Spring.
- */
 @Component
 public class LambdaWorkerRunner {
 

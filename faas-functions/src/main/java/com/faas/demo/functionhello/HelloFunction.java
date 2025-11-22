@@ -1,7 +1,6 @@
 package com.faas.demo.functionhello;
 
 import com.faas.LocalLambdaFunction;
-import com.faas.enums.WorkloadType;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
