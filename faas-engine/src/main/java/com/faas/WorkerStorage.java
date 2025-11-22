@@ -3,6 +3,7 @@ package com.faas;
 import com.faas.dto.EventRequest;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Queue/storage abstraction.
@@ -33,4 +34,8 @@ public interface WorkerStorage {
     void storeFunctionError(String functionName, String jsonError);
 
     void storeGlobalError(String jsonError);
+
+    List<String> getFunctionResults(String functionName, int page, int size);
+
+    List<String> getFunctionErrors(String functionName, int page, int size);
 }

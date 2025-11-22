@@ -40,12 +40,12 @@ public class HelloFunction implements LocalLambdaFunction {
         if (name.equalsIgnoreCase("fail")) {
             throw new RuntimeException("Expected Fail Simulation");
         }
-
         for (int k : a) {
             for (int i : b) {
                 sum += k + i;
             }
         }
+        double result = Math.sqrt(sum);
 
 //            try {
 //                Thread.sleep(1000);

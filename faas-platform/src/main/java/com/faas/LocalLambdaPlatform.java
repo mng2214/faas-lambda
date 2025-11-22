@@ -12,8 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.faas.constants.RedisKeys.EVENTS_QUEUE;
-
+import static com.faas.constants.RedisKeys.*;
 
 
 @Service
@@ -22,13 +21,15 @@ public class LocalLambdaPlatform {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final FunctionRegistry functionRegistry;
+    private final RedisMetricsService metricsService;
 
     public LocalLambdaPlatform(StringRedisTemplate redisTemplate,
                                ObjectMapper objectMapper,
-                               FunctionRegistry functionRegistry) {
+                               FunctionRegistry functionRegistry, RedisMetricsService metricsService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.functionRegistry = functionRegistry;
+        this.metricsService = metricsService;
     }
 
     public boolean functionExists(String functionName) {
@@ -78,4 +79,44 @@ public class LocalLambdaPlatform {
                 })
                 .toList();
     }
+
+
+    public Map<String, Object> getSystemMetrics() {
+        long queueLength = metricsService.getQueueLength();
+        long active = metricsService.getActiveInvocations();
+        long processed = metricsService.getProcessedCount();
+        long errors = metricsService.getErrorCount();
+
+        return Map.of(
+                "queueLength", queueLength,
+                "activeInvocations", active,
+                "processedCount", processed,
+                "errorCount", errors
+        );
+    }
+
+
+    public List<String> getListForKey(String key, int page, int size) {
+        long start = (long) page * size;
+        long end = start + size - 1;
+        return redisTemplate.opsForList().range(key, start, end);
+    }
+
+    public List<String> getFunctionResults(String functionName, int page, int size) {
+        String key = SUCCESS_LIST_PREFIX + functionName;
+        long start = (long) page * size;
+        long end = start + size - 1;
+
+        return redisTemplate.opsForList().range(key, start, end);
+    }
+
+
+    public List<String> getFunctionErrors(String functionName, int page, int size) {
+        String key = FUNCTION_ERRORS_LIST_PREFIX + functionName;
+        long start = (long) page * size;
+        long end = start + size - 1;
+
+        return redisTemplate.opsForList().range(key, start, end);
+    }
+
 }

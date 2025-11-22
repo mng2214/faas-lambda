@@ -29,4 +29,9 @@ public class RedisMetricsService {
         String v = redis.opsForValue().get(ERROR_COUNT);
         return v != null ? Long.parseLong(v) : 0L;
     }
+
+    public long getQueueLength() {
+        Long size = redis.opsForList().size(EVENTS_QUEUE);
+        return size != null ? size : 0L;
+    }
 }

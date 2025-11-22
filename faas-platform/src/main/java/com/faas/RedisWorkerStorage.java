@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
+import java.util.List;
 
 import static com.faas.constants.RedisKeys.*;
 
@@ -88,4 +89,23 @@ public class RedisWorkerStorage implements WorkerStorage {
     public void storeGlobalError(String jsonError) {
         redis.opsForList().rightPush(GLOBAL_ERRORS, jsonError);
     }
+
+    @Override
+    public List<String> getFunctionResults(String functionName, int page, int size) {
+        String key = SUCCESS_LIST_PREFIX + functionName;
+        long start = (long) page * size;
+        long end = start + size - 1;
+
+        return redis.opsForList().range(key, start, end);
+    }
+
+    @Override
+    public List<String> getFunctionErrors(String functionName, int page, int size) {
+        String key = FUNCTION_ERRORS_LIST_PREFIX + functionName;
+        long start = (long) page * size;
+        long end = start + size - 1;
+
+        return redis.opsForList().range(key, start, end);
+    }
+
 }
