@@ -217,7 +217,7 @@ LPUSH faas:results:hello
 
 ---
 
-## ▶ Running the Project
+##  Running the Project
 
 ### Requirements
 
@@ -250,7 +250,7 @@ docker run -p 6379:6379 redis
 
 ---
 
-## 📎 Useful Endpoints
+##  Useful Endpoints
 
 | Endpoint                          | Description      |
 |-----------------------------------|------------------|
