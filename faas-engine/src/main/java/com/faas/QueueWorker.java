@@ -20,6 +20,7 @@ public class QueueWorker {
     private final ObjectMapper objectMapper;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+
     private final AtomicInteger workerCount = new AtomicInteger(0);
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
 
@@ -36,7 +37,7 @@ public class QueueWorker {
     }
 
     public void start() {
-        if (!config.isEnabled()) {
+        if (!config.enabled()) {
             log.info("Local Lambda worker is disabled via configuration");
             return;
         }
@@ -50,9 +51,9 @@ public class QueueWorker {
 
 
         CompletableFuture
-                .delayedExecutor(config.getInitialDelayMs(), TimeUnit.MILLISECONDS)
+                .delayedExecutor(config.initialDelayMs(), TimeUnit.MILLISECONDS)
                 .execute(() -> {
-                    log.info("Starting QueueWorker after initialDelay={}ms", config.getInitialDelayMs());
+                    log.info("Starting QueueWorker after initialDelay={}ms", config.initialDelayMs());
                     startWorker(workerCount.incrementAndGet());
                     scheduleAutoscale();
                 });
@@ -75,22 +76,33 @@ public class QueueWorker {
             log.info("Worker-{} started", id);
             while (running.get()) {
                 try {
-                    if (concurrentInvocations.get() >= config.getMaxConcurrentInvocations()) {
+                    // Лимит по concurrency
+                    if (concurrentInvocations.get() >= config.maxConcurrentInvocations()) {
                         Thread.sleep(10);
                         continue;
                     }
 
+                    // Берём событие из очереди
                     FunctionEvent event = storage.pollNextEvent(
-                            Duration.ofSeconds(config.getPollTimeoutSeconds()));
+                            Duration.ofSeconds(config.pollTimeoutSeconds())
+                    );
 
+                    // ⚠️ Если событий нет — вообще не трогаем active_invocations
                     if (event == null) {
                         continue;
                     }
 
+                    // ✅ СЧЁТЧИКИ УВЕЛИЧИВАЕМ ОДИН РАЗ
                     concurrentInvocations.incrementAndGet();
                     storage.incrementActive();
 
-                    handleEvent(event);
+                    try {
+                        handleEvent(event);
+                    } finally {
+                        // ✅ И УМЕНЬШАЕМ ОДИН РАЗ
+                        concurrentInvocations.decrementAndGet();
+                        storage.decrementActive();
+                    }
 
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -98,15 +110,13 @@ public class QueueWorker {
                     break;
                 } catch (Exception e) {
                     log.error("Unexpected error in worker loop", e);
-                    tryStoreGlobalError("Unexpected worker error: " + e.getMessage(), e);
-                } finally {
-                    concurrentInvocations.decrementAndGet();
-                    storage.decrementActive();
+                    // тут можно писать global error, но ВАЖНО: НЕ ТРОГАЕМ active_invocations
                 }
             }
             log.info("Worker-{} finished", id);
         });
     }
+
 
     private void handleEvent(FunctionEvent event) {
         String functionName = event.getFunctionName();
@@ -122,7 +132,7 @@ public class QueueWorker {
         }
 
         int attempt = 0;
-        while (attempt <= config.getMaxRetries()) {
+        while (attempt <= config.maxRetries()) {
             attempt++;
             try {
                 Map<String, Object> output = function.handle(payload);
@@ -142,9 +152,9 @@ public class QueueWorker {
                 return;
             } catch (Exception ex) {
                 log.error("Error executing function '{}' (attempt {}/{})",
-                        functionName, attempt, config.getMaxRetries() + 1, ex);
+                        functionName, attempt, config.maxRetries() + 1, ex);
 
-                if (attempt > config.getMaxRetries()) {
+                if (attempt > config.maxRetries()) {
                     storage.incrementError();
                     tryStoreFunctionError(functionName, payload, ex);
                     return;
@@ -198,7 +208,7 @@ public class QueueWorker {
 
                     if (desired > current) {
                         int toStart = Math.min(desired - current,
-                                config.getMaxWorkerThreads() - current);
+                                config.maxWorkerThreads() - current);
 
                         for (int i = 0; i < toStart; i++) {
                             int id = workerCount.incrementAndGet();
@@ -224,7 +234,7 @@ public class QueueWorker {
         if (queueLen <= 0) {
             return 1;
         }
-        long workers = Math.min(config.getMaxWorkerThreads(), Math.max(1, queueLen / 10));
+        long workers = Math.min(config.maxWorkerThreads(), Math.max(1, queueLen / 10));
         return (int) workers;
     }
 }
