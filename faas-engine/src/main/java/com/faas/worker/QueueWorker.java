@@ -49,6 +49,8 @@ public class QueueWorker {
 
     // ---- worker state ----
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
 
     private ExecutorService workerExecutor;
@@ -88,6 +90,7 @@ public class QueueWorker {
     // ========================================================================
 
     public void start() {
+
         if (!config.enabled()) {
             log.warn("QueueWorker is disabled via configuration.");
             return;
@@ -155,40 +158,66 @@ public class QueueWorker {
     // MAIN LOOP
     // ========================================================================
 
-    private void startWorkerLoop(int id) {
-        log.info("Worker-{} started", id);
+    private void startWorkerLoop(int workerIndex) {
+        log.info("Worker-{} started", workerIndex);
         Duration pollTimeout = Duration.ofSeconds(Math.max(1, config.pollTimeoutSeconds()));
         int maxConcurrency = Math.max(1, config.maxConcurrentInvocations());
 
         while (running.get()) {
             try {
-                // simple back-pressure based on concurrentInvocations
                 if (concurrentInvocations.get() >= maxConcurrency) {
-                    Thread.sleep(5);
+                    Thread.sleep(5L);
                     continue;
                 }
 
-                EventRequest event = storage.pollNextEvent(pollTimeout);
+                EventRequest event;
+                try {
+                    event = storage.pollNextEvent(pollTimeout);
+                } catch (IllegalStateException redisEx) {
+                    if (isRedisStoppingOrStopped(redisEx)) {
+                        log.debug("Worker [{}] Redis is stopping/stopped while polling, exiting loop: {}",
+                                workerIndex, redisEx.getMessage());
+                        break;
+                    }
+                    log.error("Worker [{}] failed to poll event", workerIndex, redisEx);
+                    tryStoreGlobalError("Worker [%s] failed to poll event %s".formatted(workerIndex, redisEx), redisEx);
+                    continue;
+                }
+
                 if (event == null) {
                     continue;
                 }
 
-                concurrentInvocations.incrementAndGet();
-                storage.incrementActive();
+                // дальше твоя обычная логика обработки event...
 
-                dispatchEvent(event);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
-                log.warn("Worker-{} interrupted, exiting loop", id);
-                break;
+                if (shuttingDown.get()) {
+                    log.debug("Worker [{}] interrupted due to shutdown, exiting loop", workerIndex);
+                    break;
+                }
+                log.warn("Worker [{}] interrupted unexpectedly: {}", workerIndex, ie.getMessage());
+            } catch (IllegalStateException redisEx) {
+                if (isRedisStoppingOrStopped(redisEx)) {
+                    log.debug("Worker [{}] Redis is stopping/stopped (outer catch), exiting loop: {}",
+                            workerIndex, redisEx.getMessage());
+                    break;
+                }
+                log.error("Worker [{}] unexpected Redis error in main loop", workerIndex, redisEx);
+                tryStoreGlobalError("Worker [%s] unexpected Redis error in main loop".formatted(workerIndex), redisEx);
             } catch (Exception ex) {
-                log.error("Worker-{} failed to poll event", id, ex);
-                // global storage error
-                tryStoreGlobalError("Failed to poll event", ex);
+                if (shuttingDown.get()) {
+                    log.debug("Worker [{}] caught exception during shutdown: {}", workerIndex, ex.getMessage());
+                    break;
+                }
+                log.error("Worker [{}] unexpected error in main loop, will try to store global error", workerIndex, ex);
+                tryStoreGlobalError("Worker [%s] unexpected error in main loop, will try to store global error".formatted(workerIndex), ex);
+
             }
         }
 
-        log.info("Worker-{} stopped", id);
+
+        log.info("Worker-{} stopped", workerIndex);
     }
 
     // ========================================================================
@@ -218,18 +247,26 @@ public class QueueWorker {
         switch (mode) {
             case "STREAM", "STREAMING" ->
                     targetExecutor.submit(() -> streamingProcessor.processStream(event, function, payload));
-            case "CHAIN" ->
-                    targetExecutor.submit(() -> chainProcessor.processChain(event, payload));
+            case "CHAIN" -> targetExecutor.submit(() -> chainProcessor.processChain(event, payload));
             case "WEBHOOK" ->
                     targetExecutor.submit(() -> simpleProcessor.processSimple(event, function, payload, true));
-            default ->
-                    targetExecutor.submit(() -> simpleProcessor.processSimple(event, function, payload, false));
+            default -> targetExecutor.submit(() -> simpleProcessor.processSimple(event, function, payload, false));
         }
     }
 
     // ========================================================================
     // SHARED HELPERS
     // ========================================================================
+
+    private boolean isRedisStoppingOrStopped(Exception ex) {
+        String msg = ex.getMessage();
+        if (msg == null) {
+            return false;
+        }
+        return msg.contains("LettuceConnectionFactory is STOPPING")
+                || msg.contains("LettuceConnectionFactory has been STOPPED");
+    }
+
 
     private Map<String, Object> safePayload(EventRequest event) {
         Map<String, Object> payload = event.getPayload();

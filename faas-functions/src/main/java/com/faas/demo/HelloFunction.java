@@ -28,6 +28,14 @@ public class HelloFunction implements LocalLambdaFunction {
 
     @Override
     public Map<String, Object> handle(Map<String, Object> input) {
+        long bucket = 0;
+        int[] a = new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+        int[] b = new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+        for (int i : a) {
+            for (int j : b) {
+                bucket = i + j;
+            }
+        }
         Map<String, Object> out = new HashMap<>();
         String name = input != null && input.get("name") != null
                 ? String.valueOf(input.get("name"))
@@ -36,6 +44,8 @@ public class HelloFunction implements LocalLambdaFunction {
         out.put("message", "hello " + name + " from local FaaS!");
         out.put("timestamp", Instant.now().toString());
         out.put("input", input);
+
+
         return out;
     }
 }
