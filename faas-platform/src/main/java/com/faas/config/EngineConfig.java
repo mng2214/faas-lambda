@@ -6,14 +6,22 @@ import com.faas.registry.FunctionRegistry;
 import com.faas.storage.WorkerStorage;
 import com.faas.worker.QueueWorker;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.List;
 
 @Configuration
+@Slf4j
 public class EngineConfig {
+
 
     @Bean
     public WorkerStorage workerStorage(StringRedisTemplate redisTemplate,
@@ -23,7 +31,7 @@ public class EngineConfig {
 
     @Bean
     public FunctionRegistry functionRegistry(List<LocalLambdaFunction> functionBeans) {
-        System.out.println("### FOUND FUNCTIONS: " + functionBeans.size());
+        log.info("TOTAL FOUND FUNCTIONS: {}", functionBeans.size());
         FunctionRegistry registry = new FunctionRegistry();
         registry.registerAll(functionBeans);
         return registry;

@@ -49,6 +49,8 @@ public class QueueWorker {
 
     // ---- worker state ----
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
 
     private ExecutorService workerExecutor;
@@ -88,6 +90,7 @@ public class QueueWorker {
     // ========================================================================
 
     public void start() {
+
         if (!config.enabled()) {
             log.warn("QueueWorker is disabled via configuration.");
             return;
