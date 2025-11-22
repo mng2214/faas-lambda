@@ -15,10 +15,10 @@ public class HelloFunction implements LocalLambdaFunction {
         return "hello";
     }
 
-    @Override
-    public WorkloadType workloadType() {
-        return WorkloadType.CPU_BOUND;
-    }
+//    @Override
+//    public WorkloadType workloadType() {
+//        return WorkloadType.CPU_BOUND;
+//    }
 
     @Override
     public Map<String, Object> handle(Map<String, Object> input) {

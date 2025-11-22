@@ -23,11 +23,32 @@ public class QueueWorker {
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
+    // сколько воркеров (loop'ов) сейчас запущено
     private final AtomicInteger workerCount = new AtomicInteger(0);
+    // сколько функций СЕЙЧАС выполняются
     private final AtomicInteger concurrentInvocations = new AtomicInteger(0);
     private final AtomicInteger cpuIndex = new AtomicInteger(0);
 
-    private ExecutorService executor;
+    // виртуальные потоки для воркеров (основной цикл чтения из очереди)
+    private ExecutorService workerExecutor;
+
+    // I/O задачи — в виртуальные потоки
+    private final ExecutorService ioExecutor =
+            Executors.newThreadPerTaskExecutor(
+                    Thread.ofVirtual().name("faas-io-", 0).factory()
+            );
+
+    // CPU задачи — в реальные потоки
+    private final ExecutorService cpuExecutor =
+            Executors.newFixedThreadPool(
+                    Runtime.getRuntime().availableProcessors(),
+                    r -> {
+                        Thread t = new Thread(r);
+                        t.setName("faas-cpu-" + cpuIndex.incrementAndGet());
+                        t.setDaemon(false);
+                        return t;
+                    }
+            );
 
     public QueueWorker(WorkerStorage storage,
                        FunctionRegistry functionRegistry,
@@ -49,17 +70,27 @@ public class QueueWorker {
             return;
         }
 
-        this.executor = Executors.newCachedThreadPool(r ->
-                Thread.ofVirtual().name("local-lambda-worker-", 0).factory().newThread(r));
+        // воркеры тоже запускаем в виртуальных потоках
+        this.workerExecutor = Executors.newCachedThreadPool(r ->
+                Thread.ofVirtual()
+                        .name("local-lambda-worker-", 0)
+                        .factory()
+                        .newThread(r)
+        );
 
+        // стартуем c задержкой (initialDelay), но внутри виртуального потока
+        workerExecutor.submit(() -> {
+            try {
+                Thread.sleep(config.initialDelayMs());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
 
-        CompletableFuture
-                .delayedExecutor(config.initialDelayMs(), TimeUnit.MILLISECONDS)
-                .execute(() -> {
-                    log.info("Starting QueueWorker after initialDelay={}ms", config.initialDelayMs());
-                    startWorker(workerCount.incrementAndGet());
-                    scheduleAutoscale();
-                });
+            log.info("Starting QueueWorker after initialDelay={}ms", config.initialDelayMs());
+            startWorker(workerCount.incrementAndGet());
+            scheduleAutoscale();
+        });
     }
 
     public void stop() {
@@ -67,21 +98,31 @@ public class QueueWorker {
             return;
         }
 
-        if (executor != null) {
-            executor.shutdownNow();
+        if (workerExecutor != null) {
+            workerExecutor.shutdownNow();
         }
+
+        ioExecutor.shutdownNow();
+        cpuExecutor.shutdownNow();
 
         log.info("QueueWorker stopped");
     }
 
+    /**
+     * Один "воркер" — это цикл, который:
+     *  - смотрит на лимит concurrentInvocations
+     *  - читает события из очереди
+     *  - на каждое событие запускает async обработку через CPU/IO executor
+     */
     private void startWorker(int id) {
-        executor.submit(() -> {
+        workerExecutor.submit(() -> {
             log.info("Worker-{} started", id);
             while (running.get()) {
                 try {
-                    // Лимит по concurrency
+                    // лимит по количеству ОДНОВРЕМЕННО выполняемых функций
                     if (concurrentInvocations.get() >= config.maxConcurrentInvocations()) {
-                        Thread.sleep(10);
+                        // небольшой sleep, чтобы не жрать CPU в спин-лупе
+                        Thread.sleep(5);
                         continue;
                     }
 
@@ -93,16 +134,23 @@ public class QueueWorker {
                         continue;
                     }
 
+                    // считаем активные вызовы и метрики
                     concurrentInvocations.incrementAndGet();
                     storage.incrementActive();
 
-                    try {
-                        handleEvent(event);
-                    } finally {
-                        // ✅ И УМЕНЬШАЕМ ОДИН РАЗ
-                        concurrentInvocations.decrementAndGet();
-                        storage.decrementActive();
-                    }
+                    // запускаем обработку события асинхронно
+                    handleEvent(event)
+                            .whenComplete((ignored, ex) -> {
+                                try {
+                                    if (ex != null) {
+                                        log.error("Unhandled exception in handleEvent completion", ex);
+                                    }
+                                } finally {
+                                    // когда функция реально завершилась — уменьшаем счётчики
+                                    concurrentInvocations.decrementAndGet();
+                                    storage.decrementActive();
+                                }
+                            });
 
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -110,32 +158,18 @@ public class QueueWorker {
                     break;
                 } catch (Exception e) {
                     log.error("Unexpected error in worker loop", e);
-                    // тут можно писать global error, но ВАЖНО: НЕ ТРОГАЕМ active_invocations
+                    // сюда можно добавить tryStoreGlobalError, если надо
                 }
             }
             log.info("Worker-{} finished", id);
         });
     }
 
-    // I/O задачи — в виртуальные потоки
-    private final ExecutorService ioExecutor =
-            Executors.newThreadPerTaskExecutor(
-                    Thread.ofVirtual().name("faas-io-", 0).factory()
-            );
-
-    // CPU задачи — в реальные потоки
-    private final ExecutorService cpuExecutor =
-            Executors.newFixedThreadPool(
-                    Runtime.getRuntime().availableProcessors(),
-                    r -> {
-                        Thread t = new Thread(r);
-                        t.setName("faas-cpu-" + cpuIndex.incrementAndGet());
-                        t.setDaemon(false);
-                        return t;
-                    }
-            );
-
-    private void handleEvent(FunctionEvent event) {
+    /**
+     * Асинхронная обработка одного события.
+     * Возвращает CompletableFuture, который завершается, когда функция (с ретраями) закончила работу.
+     */
+    private CompletableFuture<Void> handleEvent(FunctionEvent event) {
         String functionName = event.getFunctionName();
         Map<String, Object> payload = event.getPayload();
 
@@ -145,17 +179,19 @@ public class QueueWorker {
             log.warn(msg);
             storage.incrementError();
             tryStoreGlobalError(msg, null);
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
-        ExecutorService executor =
+        // выбираем executor по типу нагрузки
+        ExecutorService targetExecutor =
                 (function.workloadType() == WorkloadType.CPU_BOUND)
                         ? cpuExecutor
                         : ioExecutor;
 
-        Runnable task = () -> {
+        int maxAttempts = Math.max(1, config.maxRetries()); // защита от 0/отрицательных
+
+        return CompletableFuture.runAsync(() -> {
             int attempt = 0;
-            int maxAttempts = config.maxRetries(); // теперь это ОБЩЕЕ ЧИСЛО попыток
 
             while (attempt < maxAttempts) {
                 attempt++;
@@ -174,25 +210,22 @@ public class QueueWorker {
                     String json = objectMapper.writeValueAsString(record);
                     storage.storeResult(functionName, json);
 
-                    return; // успех — выходим
+                    return; // успех — выходим из цикла и таски
                 } catch (Exception ex) {
                     log.error("Error executing function '{}' (attempt {}/{})",
                             functionName, attempt, maxAttempts, ex);
 
-                    // если это была ПОСЛЕДНЯЯ попытка
                     if (attempt >= maxAttempts) {
                         storage.incrementError();
                         tryStoreFunctionError(functionName, payload, ex);
                         return;
                     }
-                    // иначе — просто пойдём на следующую итерацию (retry)
+
+                    // если хочешь backoff, можно вставить тут Thread.sleep(...)
                 }
             }
-        };
-
-        executor.submit(task);
+        }, targetExecutor);
     }
-
 
     private void tryStoreFunctionError(String functionName,
                                        Map<String, Object> payload,
@@ -229,8 +262,12 @@ public class QueueWorker {
         }
     }
 
+    /**
+     * Автоскейл: периодически смотрим на длину очереди и количество воркеров,
+     * добавляем воркеров, если очередь растёт.
+     */
     private void scheduleAutoscale() {
-        executor.submit(() -> {
+        workerExecutor.submit(() -> {
             while (running.get()) {
                 try {
                     long queueLen = storage.getQueueLength();
@@ -238,10 +275,8 @@ public class QueueWorker {
                     int current = workerCount.get();
 
                     if (desired > current) {
-                        int toStart = Math.min(desired - current,
-                                config.maxWorkerThreads() - current);
-
-                        for (int i = 0; i < toStart; i++) {
+                        int toAdd = desired - current;
+                        for (int i = 0; i < toAdd; i++) {
                             int id = workerCount.incrementAndGet();
                             startWorker(id);
                         }
@@ -265,7 +300,10 @@ public class QueueWorker {
         if (queueLen <= 0) {
             return 1;
         }
-        long workers = Math.min(config.maxWorkerThreads(), Math.max(1, queueLen / 10));
+        long workers = Math.min(
+                config.maxWorkerThreads(),
+                Math.max(1, queueLen / 10)
+        );
         return (int) workers;
     }
 }
