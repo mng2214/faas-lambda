@@ -26,7 +26,7 @@ public class LambdaWorkerProperties {
     public static class Lambda {
         private int memoryMb = 512;
         private int maxRetries = 3;
-        private int maxConcurrent = 256;
-        private int maxWorkerThreads = 4;
+        private int maxConcurrent = 500;
+        private int maxWorkerThreads = 7;
     }
 }
