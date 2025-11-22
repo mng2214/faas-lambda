@@ -1,6 +1,6 @@
 package com.faas.config;
 
-import com.faas.LocalLambdaFunction;
+import com.faas.function.LocalLambdaFunction;
 import com.faas.storage.RedisWorkerStorage;
 import com.faas.registry.FunctionRegistry;
 import com.faas.storage.WorkerStorage;

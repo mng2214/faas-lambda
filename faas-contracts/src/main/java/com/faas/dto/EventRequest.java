@@ -1,4 +1,4 @@
-package com.faas;
+package com.faas.dto;
 
 import java.util.Map;
 

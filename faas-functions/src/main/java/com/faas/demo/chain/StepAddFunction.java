@@ -1,6 +1,6 @@
 package com.faas.demo.chain;
 
-import com.faas.LocalLambdaFunction;
+import com.faas.function.LocalLambdaFunction;
 import com.faas.enums.WorkloadType;
 import org.springframework.stereotype.Component;
 

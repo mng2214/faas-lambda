@@ -1,4 +1,4 @@
-package com.faas;
+package com.faas.function;
 
 import com.faas.enums.WorkloadType;
 
