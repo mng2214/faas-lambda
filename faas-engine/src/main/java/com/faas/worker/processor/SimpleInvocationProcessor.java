@@ -1,8 +1,8 @@
 package com.faas.worker.processor;
 
+import com.faas.LocalLambdaFunction;
 import com.faas.config.LambdaWorkerConfig;
 import com.faas.dto.EventRequest;
-import com.faas.function.LocalLambdaFunction;
 import com.faas.storage.WorkerStorage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

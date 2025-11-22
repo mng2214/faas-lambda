@@ -1,7 +1,7 @@
 package com.faas.demo;
 
+import com.faas.LocalLambdaFunction;
 import com.faas.enums.WorkloadType;
-import com.faas.function.LocalLambdaFunction;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -48,7 +48,7 @@ public class ProgressStreamFunction implements LocalLambdaFunction.Streaming {
 
                 emitter.next(chunk);
 
-                // имитация работы
+                // work imitation
                 Thread.sleep(300);
             }
             emitter.complete();

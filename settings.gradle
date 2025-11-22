@@ -5,3 +5,5 @@ include 'faas-engine'
 include 'faas-functions'
 include 'faas-platform'
 include 'faas-lambda-service'
+include 'faas-contracts'
+

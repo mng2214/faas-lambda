@@ -1,7 +1,7 @@
 package com.faas.config;
 
+import com.faas.LocalLambdaFunction;
 import com.faas.storage.RedisWorkerStorage;
-import com.faas.function.LocalLambdaFunction;
 import com.faas.registry.FunctionRegistry;
 import com.faas.storage.WorkerStorage;
 import com.faas.worker.QueueWorker;
@@ -23,6 +23,7 @@ public class EngineConfig {
 
     @Bean
     public FunctionRegistry functionRegistry(List<LocalLambdaFunction> functionBeans) {
+        System.out.println("### FOUND FUNCTIONS: " + functionBeans.size());
         FunctionRegistry registry = new FunctionRegistry();
         registry.registerAll(functionBeans);
         return registry;

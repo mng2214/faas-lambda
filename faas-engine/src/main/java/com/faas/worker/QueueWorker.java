@@ -1,9 +1,9 @@
 package com.faas.worker;
 
+import com.faas.LocalLambdaFunction;
 import com.faas.config.LambdaWorkerConfig;
 import com.faas.dto.EventRequest;
 import com.faas.enums.WorkloadType;
-import com.faas.function.LocalLambdaFunction;
 import com.faas.registry.FunctionRegistry;
 import com.faas.storage.WorkerStorage;
 import com.faas.worker.processor.ChainInvocationProcessor;

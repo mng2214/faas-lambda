@@ -5,7 +5,7 @@ plugins {
 dependencies {
 
     implementation project(':faas-common')
-    implementation project(':faas-engine')
+    implementation project(':faas-contracts')
 
     implementation "org.springframework:spring-context"
 

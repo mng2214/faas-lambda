@@ -9,6 +9,7 @@ dependencies {
     implementation project(':faas-common')
     implementation project(':faas-platform')
     implementation project(':faas-functions')
+    implementation project(':faas-contracts')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
