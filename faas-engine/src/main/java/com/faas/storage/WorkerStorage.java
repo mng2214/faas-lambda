@@ -23,19 +23,9 @@ public interface WorkerStorage {
 
     void incrementError();
 
-    long getActiveCount();
-
-    long getProcessedCount();
-
-    long getErrorCount();
-
     void storeResult(String functionName, String jsonResult);
 
     void storeFunctionError(String functionName, String jsonError);
 
     void storeGlobalError(String jsonError);
-
-    List<String> getFunctionResults(String functionName, int page, int size);
-
-    List<String> getFunctionErrors(String functionName, int page, int size);
 }
