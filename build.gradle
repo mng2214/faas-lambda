@@ -3,10 +3,6 @@ plugins {
     id 'io.spring.dependency-management' version "$springDepMgmt"
 }
 
-ext {
-    springBootVersion = "$springBoot"
-}
-
 subprojects {
     group = 'com.faas'
     version = '0.0.1-SNAPSHOT'
@@ -26,7 +22,7 @@ subprojects {
 
     dependencyManagement {
         imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+            mavenBom "org.springframework.boot:spring-boot-dependencies:$springBoot"
         }
     }
 
@@ -38,6 +34,11 @@ subprojects {
         testImplementation 'org.junit.jupiter:junit-jupiter'
 
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+        implementation 'org.slf4j:slf4j-api'
+        runtimeOnly 'org.slf4j:slf4j-simple'
+
+        implementation 'com.fasterxml.jackson.core:jackson-databind'
     }
 
     test {

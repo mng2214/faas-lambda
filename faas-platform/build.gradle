@@ -5,12 +5,13 @@ plugins {
 dependencies {
     implementation project(':faas-common')
     implementation project(':faas-engine')
-    implementation project(':faas-functions')
 
-    implementation 'org.springframework.boot:spring-boot-starter'
 
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
+    implementation "org.springframework:spring-context"
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 }
