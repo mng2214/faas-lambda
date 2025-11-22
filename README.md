@@ -50,6 +50,23 @@ In most real-world scenarios, a single instance is enough to:
 
 ![Capture](https://github.com/user-attachments/assets/f1b9e7ba-d4a1-4b59-89ec-94fcbff9ba4c)
 
+### Local perfomance testing results for somple copmute function for 10 min
+
+```java
+        long sum = 0;
+        final int[] a = new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+        final int[] b = new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+
+        for (int k : a) {
+            for (int i : b) {
+                sum += k + i;
+            }
+        }
+```
+
+![Capture](https://github.com/user-attachments/assets/40522f6c-9c15-42b3-88c7-70676f84d9a7)
+
+
 ## Features
 
 ### **1. Function Registration**
