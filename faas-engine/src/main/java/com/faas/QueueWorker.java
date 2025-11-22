@@ -2,9 +2,7 @@ package com.faas;
 
 import com.faas.model.FunctionEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -13,13 +11,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Чистый воркер движка: ничего не знает про Spring/Redis.
- * Работает через WorkerStorage + FunctionRegistry.
- */
+@Slf4j
 public class QueueWorker {
-
-    private static final Logger log = LoggerFactory.getLogger(QueueWorker.class);
 
     private final WorkerStorage storage;
     private final FunctionRegistry functionRegistry;
@@ -55,7 +48,7 @@ public class QueueWorker {
         this.executor = Executors.newCachedThreadPool(r ->
                 Thread.ofVirtual().name("local-lambda-worker-", 0).factory().newThread(r));
 
-        // отложенный старт
+
         CompletableFuture
                 .delayedExecutor(config.getInitialDelayMs(), TimeUnit.MILLISECONDS)
                 .execute(() -> {

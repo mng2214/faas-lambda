@@ -1,8 +1,8 @@
 package com.faas;
 
-/**
- * Конфигурация воркера без Spring.
- */
+import lombok.Getter;
+
+@Getter
 public class LambdaWorkerConfig {
 
     private final boolean enabled;
@@ -26,27 +26,4 @@ public class LambdaWorkerConfig {
         this.maxConcurrentInvocations = maxConcurrentInvocations;
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public long getInitialDelayMs() {
-        return initialDelayMs;
-    }
-
-    public long getPollTimeoutSeconds() {
-        return pollTimeoutSeconds;
-    }
-
-    public int getMaxRetries() {
-        return maxRetries;
-    }
-
-    public int getMaxWorkerThreads() {
-        return maxWorkerThreads;
-    }
-
-    public int getMaxConcurrentInvocations() {
-        return maxConcurrentInvocations;
-    }
 }

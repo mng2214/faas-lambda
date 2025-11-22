@@ -4,10 +4,6 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Реестр функций БЕЗ Spring.
- * Платформа сама создаёт экземпляр и регистрирует бины-функции.
- */
 public class FunctionRegistry {
 
     private final Map<String, LocalLambdaFunction> functions = new ConcurrentHashMap<>();
