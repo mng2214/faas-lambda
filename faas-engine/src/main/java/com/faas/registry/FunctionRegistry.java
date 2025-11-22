@@ -1,4 +1,6 @@
-package com.faas;
+package com.faas.registry;
+
+import com.faas.function.LocalLambdaFunction;
 
 import java.util.Collection;
 import java.util.Collections;

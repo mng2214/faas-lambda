@@ -1,6 +1,7 @@
 package com.faas;
 
 import com.faas.dto.EventRequest;
+import com.faas.storage.WorkerStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.data.redis.core.StringRedisTemplate;

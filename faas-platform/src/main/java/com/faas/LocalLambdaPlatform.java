@@ -2,6 +2,7 @@ package com.faas;
 
 import com.faas.dto.EventRequest;
 import com.faas.dto.FunctionInfo;
+import com.faas.registry.FunctionRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 

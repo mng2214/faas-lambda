@@ -1,4 +1,4 @@
-package com.faas;
+package com.faas.config;
 
 public record LambdaWorkerConfig(boolean enabled,
                                  long initialDelayMs,

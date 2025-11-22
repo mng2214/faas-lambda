@@ -1,4 +1,4 @@
-package com.faas;
+package com.faas.storage;
 
 import com.faas.dto.EventRequest;
 

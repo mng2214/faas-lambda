@@ -1,6 +1,11 @@
 package com.faas;
 
 
+import com.faas.config.LambdaWorkerConfig;
+import com.faas.function.LocalLambdaFunction;
+import com.faas.registry.FunctionRegistry;
+import com.faas.storage.WorkerStorage;
+import com.faas.worker.QueueWorker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.context.annotation.Bean;

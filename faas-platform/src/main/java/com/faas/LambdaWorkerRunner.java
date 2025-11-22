@@ -1,6 +1,7 @@
 package com.faas;
 
 
+import com.faas.worker.QueueWorker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
